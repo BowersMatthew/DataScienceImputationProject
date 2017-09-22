@@ -56,7 +56,12 @@ public class DataImputation {
 		System.out.println("Finished.");
 	}
 
-	private static void fillHotDeck(double[][] original, File impute4Hd2) {
+	/**
+	 * writes complete data set to target file using unconditional hot deck imputation
+	 * @param original double[][] the original data with missing values
+	 * @param target File the target file
+	 */
+	private static void fillHotDeck(double[][] original, File target) {
 		int[] bestMatch = new int[numObjects];
 		// fill bestMatch with -1 as marker
 		for (int i = 0; i < numObjects; i++){
@@ -111,7 +116,7 @@ public class DataImputation {
 			}
 		}
 		try{
-			writeToFile(toWrite, impute4Hd2);
+			writeToFile(toWrite, target);
 		}catch(IOException e){
 			e.printStackTrace();
 		}
@@ -119,12 +124,12 @@ public class DataImputation {
 	}
 	
 	/**
-	 * findNearest - returns the row index of the object which is nearest to the target object 
+	 * returns the row index of the object which is nearest to the target object 
 	 * using the class identifier as a numeric value. Being in a different class results in the 
 	 * distance for the class attribute to be 1.
-	 * @param rowToMatch - the row index of the object with a missing value
-	 * @param original - the 2D array holding the original data
-	 * @return the row index of the first closest object
+	 * @param rowToMatch int the row index of the object with a missing value
+	 * @param original double[][] the 2D array holding the original data
+	 * @return int the row index of the first closest object
 	 */
 	private static int findNearest(int rowToMatch, double[][] original){
 		int best = -1;
@@ -158,11 +163,11 @@ public class DataImputation {
 	}
 	
 	/**
-	 * findSub - Finds the row index of the nearest object which has a value for the target attribute
-	 * @param rowToMatch index of the object with a missing attribute value
-	 * @param missingValue index of the missing attribute
-	 * @param original the 2D array holding the original data
-	 * @return index of nearest object
+	 * Finds the row index of the nearest object which has a value for the target attribute
+	 * @param rowToMatch int index of the object with a missing attribute value
+	 * @param missingValue int  index of the missing attribute
+	 * @param original double[][] the 2D array holding the original data
+	 * @return index int of nearest object
 	 */
 	private static int findSub(int rowToMatch, int missingValue, double[][] original){
 		int best = -1;
@@ -195,6 +200,12 @@ public class DataImputation {
 		return best;
 	}
 
+	/**
+	 * writes complete data to target file filling missing values with conditional mean
+	 * @param trans double[][] original data transposed for faster access
+	 * @param original double[][] original data with missing values
+	 * @param target File the array will be written to this file
+	 */
 	private static void fillMeanCon(double[][] trans, double[][] original, File target) {
 		
 		double[] averagesC = new double[numFeatures - 1];
@@ -210,19 +221,27 @@ public class DataImputation {
 		}
 	}
 
+	/**
+	 * Fills string builder with known values and fills missing values from averages
+	 * @param averagesC known averages for class C objects
+	 * @param averagesF known averages for class F objects
+	 * @param original the original data
+	 * @param toWrite StringBuilder
+	 */
 	private static void fillAveragesFromMean(double[] averagesC, double[] averagesF, double[][] original,
 			StringBuilder toWrite) {
 		for(int i = 0; i < numObjects; i++){
 			//if(i == numObjects - 1){System.out.println("Last object: value: " + original[i][0]);}
 			for(int j = 0; j < numFeatures; j++){
-				// skip complete values
-				//System.out.println(original[i][j]);
+				// write complete values to string builder
 				if(original[i][j] != -1){
+					// write attribute values to string builder
 					if(j < numFeatures - 1){
 						toWrite.append(df.format(original[i][j]));
 						toWrite.append(",");
-					}else{
-						//System.out.println("In last column! Row: " + i);
+					}
+					// in last column write the correct letter to string builder
+					else{
 						if((int)original[i][j] == C){
 							toWrite.append("C\n");
 						}else if((int)original[i][j] == F){
@@ -238,12 +257,17 @@ public class DataImputation {
 						toWrite.append(df.format(averagesF[j])+",");
 					}
 				}
-			}
-			//System.out.println(toWrite.toString());	
+			}	
 		}
-		
 	}
 
+	/**
+	 * Calculates and fills the arrays of averages for each attribute for each class
+	 * @param averagesC
+	 * @param averagesF
+	 * @param trans
+	 * @param original
+	 */
 	private static void fillAverages(double[] averagesC, double[] averagesF, double[][] trans, double[][] original) {
 		double totalC, totalF;
 		int countC, countF;
@@ -271,6 +295,12 @@ public class DataImputation {
 		
 	}
 
+	/**
+	 * fills all missing values with the average value for the attribute
+	 * @param trans the original data transposed for faster access
+	 * @param original the original data
+	 * @param target the file where the output will be written
+	 */
 	private static void fillMean(double[][] trans, double[][] original, File target) {
 		
 		//System.out.println("In fillMean: " + original[3][7]);
@@ -298,26 +328,27 @@ public class DataImputation {
 			//if(i == numObjects - 1){System.out.println("Last object: value: " + original[i][0]);}
 			for(int j = 0; j < numFeatures; j++){
 				// skip complete values
-				//System.out.println(original[i][j]);
 				if(original[i][j] != -1){
+					// the value is not the last column
 					if(j < numFeatures - 1){
 						toWrite.append(df.format(original[i][j]));
 						toWrite.append(",");
-					}else{
-						//System.out.println("In last column! Row: " + i);
+					}
+					// in the lasts column write a letter instead of a number
+					else{
 						if((int)original[i][j] == C){
 							toWrite.append("C\n");
 						}else if((int)original[i][j] == F){
 							toWrite.append("F\n");
 						}
 					}
-					//continue;
-				}else{
+				}
+				// If the value was missing use the average for that column
+				else{
 					toWrite.append(df.format(averages[j]));
 					toWrite.append(",");
 				}
-			}
-			//System.out.println(toWrite.toString());	
+			}	
 		}
 		try {
 			writeToFile(toWrite, target);
@@ -326,6 +357,12 @@ public class DataImputation {
 		}
 	}
 
+	/**
+	 * Writes the string builder to the appropriate file on disk
+	 * @param toWrite StringBuilder which is buffering the data to be written
+	 * @param target File file where the data is to be written 
+	 * @throws IOException Exception handling is a thing
+	 */
 	private static void writeToFile(StringBuilder toWrite, File target) throws IOException{
 		FileWriter fw = new FileWriter(target);
 		BufferedWriter bw = new BufferedWriter(fw);
@@ -333,6 +370,10 @@ public class DataImputation {
 		bw.close();
 	}
 
+	/**
+	 * appends the column headings into the StringBuilder
+	 * @param toWrite StringBuilder which is buffering the data to be written
+	 */
 	private static void fillHeadings(StringBuilder toWrite) {
 		for(int i =0; i < numFeatures; i++){
 			if(i == numFeatures - 1){
@@ -343,14 +384,17 @@ public class DataImputation {
 		}
 	}
 
-	private static void copyArray(double[][] a, double[][] b) {
+/*	private static void copyArray(double[][] a, double[][] b) {
 		for(int i = 0; i < a.length; i++){
 			for(int j = 0; j < a[i].length; j++){
 				b[i][j] = a[i][j];
 			}
 		}	
-	}
+	}*/
 
+	/**
+	 * instantiate the array to hold all of the data
+	 */
 	private static void instantiateArrays() {
 		data1 = new double[numObjects][numFeatures];
 		transData1 = new double[numFeatures][numObjects];
@@ -361,6 +405,9 @@ public class DataImputation {
 		
 	}
 
+	/**
+	 * instantiate the many files we need
+	 */
 	private static void instantiateFiles() {
 		source1 = new File("assignment2_dataset_missing004.csv"); 
 		source2 = new File("assignment2_dataset_missing20.csv"); 
@@ -375,6 +422,12 @@ public class DataImputation {
 		impute20HdCon = new File("V00801365_a2_missing20_imputed_hd_conditional.csv");
 	}
 
+	/**
+	 * reads data from source file into an array and a transposed array
+	 * @param source File file containing the csv data
+	 * @param a double[][] target array for the data
+	 * @param b double[][] target array for the transposed data
+	 */
 	static void readData(File source, double[][] a, double[][] b){
 		FileReader reader;
 		String[] values = new String[numFeatures];
@@ -389,45 +442,51 @@ public class DataImputation {
 			for(int i = 0; i < numFeatures; i++){
 				featureNames[i] = values[i]; 
 			}
-			//lineNum++;
 			// Read in the rest of the values
 			while((line = br.readLine()) !=null){
 				values = line.split(",");
 				for(int i = 0; i < numFeatures; i++){
+					// attempt to parse a double from the current string
 					try {
-						//System.out.println(values[i]);
-						if(i == numFeatures - 1){
-							//System.out.println("Reading last column. Value: " + values[i]);
-						}
 						a[lineNum][i] = Double.parseDouble(values[i]);
-						//System.out.println(data1[lineNum][i]);
-					} catch (NumberFormatException e) {
+					} 
+					// if the parse fails we have a missing value or are in the last column
+					catch (NumberFormatException e) {
+						// assign value for C
 						if(values[i].equals("C")){
-							//System.out.println("Writing C to column: " + i);
 							a[lineNum][i] = C;
-						}if(values[i].equals("F")){
+						}
+						// assign value for F
+						if(values[i].equals("F")){
 							a[lineNum][i] = F;
-						}if(values[i].equals("?")){
+						}
+						// change missing values to -1 so we can find them later
+						if(values[i].equals("?")){
 							a[lineNum][i] = -1;;
 						}
 					}
+					// fill transposed table
 					b[i][lineNum] = a[lineNum][i];
-					//System.out.println("a: " + a[lineNum][i] + " b: " + b[i][lineNum]);
 				}
+				// move to the next row of the table
 				lineNum++;
 			}
 			br.close();
 		} catch (FileNotFoundException e) {
 			System.out.println("source1 not found, make sure your path is correct");
 			e.printStackTrace();
-			System.exit(1);
+			System.exit(-1);
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
-			System.exit(1);
+			System.exit(-1);
 		}
 	}
 	
+	/**
+	 * read in complete data set no need to transpose
+	 * @param source File source of the data in csv format
+	 * @param a double[][] target for parsed data
+	 */
 	static void readData(File source, double[][] a){
 		FileReader reader;
 		String[] values = new String[numFeatures];
@@ -472,20 +531,4 @@ public class DataImputation {
 			System.exit(1);
 		}
 	}
-	
-	/*static class DataObject{
-		private int[] values;
-		
-		
-		 * Constructor
-		 * @param i - the number of features in the data set
-		 *//*
-		private DataObject(int i){
-			values = new int[i];
-		}
-		
-		public int[] getValues(){
-			return values;
-		}*/
-	//}
 }
