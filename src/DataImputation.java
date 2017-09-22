@@ -29,7 +29,8 @@ public class DataImputation {
 	static File impute20Mean,impute20MeanCon,impute20Hd,impute20HdCon;
 	static final int C = 2;
 	static final int F = 3;
-	static DecimalFormat df = new DecimalFormat("#.#####");
+	static DecimalFormat df = new DecimalFormat("#.####");
+	static double mae4Mean, mae20Mean, mae4ConMean, mae20ConMean, mae4hd, mae20hd, mae4Conhd, mae20Conhd;
 
 	public static void main(String[] args) {
 		instantiateFiles();
@@ -41,17 +42,30 @@ public class DataImputation {
 		System.out.println("reading correct data");
 		readData(correct, correctData);
 		System.out.println("Filling 0.4% with mean");
-		fillMean(transData1, data1, impute4Mean);
+		mae4Mean = fillMean(transData1, data1, impute4Mean);
 		System.out.println("Filling 20% with mean");
-		fillMean(transData2, data2, impute20Mean);
+		mae20Mean = fillMean(transData2, data2, impute20Mean);
 		System.out.println("Filling 0.4% with Conditional mean");
-		fillMeanCon(transData1, data1, impute4MeanCon);
+		mae4ConMean = fillMeanCon(transData1, data1, impute4MeanCon);
 		System.out.println("Filling 20% with Conditional mean");
-		fillMeanCon(transData2, data2, impute20MeanCon);
+		mae20ConMean = fillMeanCon(transData2, data2, impute20MeanCon);
 		System.out.println("Filling 0.4% with hotDeck");
-		fillHotDeck(data1, impute4Hd);
+		mae4hd = fillHotDeck(data1, impute4Hd, false);
 		System.out.println("Filling 20% with hotDeck");
-		fillHotDeck(data2, impute20Hd);
+		mae20hd = fillHotDeck(data2, impute20Hd, false);
+		System.out.println("Filling 0.4% with Conditional hotDeck");
+		mae4Conhd = fillHotDeck(data1, impute4HdCon, true);
+		System.out.println("Filling 20% with Conditional hotDeck");
+		mae20Conhd = fillHotDeck(data2, impute20HdCon, true);
+		
+		System.out.println("MAE_004_mean = " + df.format(mae4Mean));
+		System.out.println("MAE_004_mean_conditional = " + df.format(mae4ConMean));
+		System.out.println("MAE_004_hd = " + df.format(mae4hd));
+		System.out.println("MAE_004_hd_conditional = " + df.format(mae4Conhd));
+		System.out.println("MAE_20_mean = " + df.format(mae20Mean));
+		System.out.println("MAE_20_mean_conditional = " + df.format(mae20ConMean));
+		System.out.println("MAE_20_hd = " + df.format(mae20hd));
+		System.out.println("MAE_20_hd_conditional = " + df.format(mae20Conhd));
 		
 		System.out.println("Finished.");
 	}
@@ -60,8 +74,11 @@ public class DataImputation {
 	 * writes complete data set to target file using unconditional hot deck imputation
 	 * @param original double[][] the original data with missing values
 	 * @param target File the target file
+	 * @param isConditional indicates if the hotdeck should consider class 
 	 */
-	private static void fillHotDeck(double[][] original, File target) {
+	private static double fillHotDeck(double[][] original, File target, boolean isConditional) {
+		double sum = 0;
+		int missing = 0;
 		int[] bestMatch = new int[numObjects];
 		// fill bestMatch with -1 as marker
 		for (int i = 0; i < numObjects; i++){
@@ -86,31 +103,34 @@ public class DataImputation {
 				}else{
 					// nearest match not know find it
 					if(bestMatch[i] == -1){
-						System.out.println("No known nearest match. Finding Match!");
-						bestMatch[i] = findNearest(i, original);						
+						//System.out.println("No known nearest match. Finding Match!");
+						bestMatch[i] = findNearest(i, original, isConditional);						
 						value = original[bestMatch[i]][j];
-						System.out.println(value);
+						
+						//System.out.println(value);
 					
 					}
 					// if current bestMatch does not have a value find a sub
 					if( original[bestMatch[i]][j] == -1){
-						System.out.println("Best match has missing value!");
-						int subMatch = findSub(i, j, original);
+						//System.out.println("Best match has missing value!");
+						int subMatch = findSub(i, j, original, isConditional);
 						value = original[subMatch][j];
-						System.out.println(value);
+						//System.out.println(value);
 					
 					}
 					// if the best match is known and has a value write it
 					else{
-						System.out.println("Using know nearest match");
+						//System.out.println("Using know nearest match");
 						value = original[bestMatch[i]][j];
-						System.out.println(value);
+						//System.out.println(value);
 					}
 					if(value == -1){
 						System.out.println("Failed to find value!");
 						System.exit(-1);
 					}else{
 						toWrite.append(df.format(value)+",");
+						sum += Math.abs(value - correctData[i][j]);
+						missing++;
 					}
 				}
 			}
@@ -120,6 +140,7 @@ public class DataImputation {
 		}catch(IOException e){
 			e.printStackTrace();
 		}
+		return sum/missing;
 		
 	}
 	
@@ -129,9 +150,10 @@ public class DataImputation {
 	 * distance for the class attribute to be 1.
 	 * @param rowToMatch int the row index of the object with a missing value
 	 * @param original double[][] the 2D array holding the original data
+	 * @param isConditional boolean indicates if class should be considered
 	 * @return int the row index of the first closest object
 	 */
-	private static int findNearest(int rowToMatch, double[][] original){
+	private static int findNearest(int rowToMatch, double[][] original, boolean isConditional){
 		int best = -1;
 		double minDistance = Double.MAX_VALUE;
 		// move through each row
@@ -139,7 +161,8 @@ public class DataImputation {
 			double runTotal = 0;
 			// if we get to the row we are trying to match skip it
 			// or if the row is missing the value we are trying to replace
-			if (j == rowToMatch){
+			if (j == rowToMatch || (isConditional && 
+					original[rowToMatch][numFeatures-1] != original[j][numFeatures-1])){
 				continue;
 			}else{
 				// sum up distances
@@ -167,9 +190,10 @@ public class DataImputation {
 	 * @param rowToMatch int index of the object with a missing attribute value
 	 * @param missingValue int  index of the missing attribute
 	 * @param original double[][] the 2D array holding the original data
+	 * @param isConditional boolean indicates if class should be considered
 	 * @return index int of nearest object
 	 */
-	private static int findSub(int rowToMatch, int missingValue, double[][] original){
+	private static int findSub(int rowToMatch, int missingValue, double[][] original, boolean isConditional){
 		int best = -1;
 		double minDistance = Double.MAX_VALUE;
 		// move through each row
@@ -177,7 +201,8 @@ public class DataImputation {
 			double runTotal = 0;
 			// if we get to the row we are trying to match skip it
 			// or if the row is missing the value we are trying to replace
-			if (j == rowToMatch || original[j][missingValue] == -1){
+			if (j == rowToMatch || original[j][missingValue] == -1 || 
+					(isConditional && original[rowToMatch][numFeatures - 1] != original[j][numFeatures - 1])){
 				continue;
 			}else{
 				// sum up distances
@@ -197,6 +222,15 @@ public class DataImputation {
 				best = j;
 			}
 		}
+		// check for the possibility that no member of the class has a value for the attribute
+		// if so try again with and unconditional search
+		if(isConditional && best == -1){
+			System.out.println("no match found in class searching all values");
+				best = findSub(rowToMatch, missingValue, original, !isConditional);
+			}
+			if(best == -1){
+				System.out.printf("Could not find a match!");
+			}
 		return best;
 	}
 
@@ -206,19 +240,20 @@ public class DataImputation {
 	 * @param original double[][] original data with missing values
 	 * @param target File the array will be written to this file
 	 */
-	private static void fillMeanCon(double[][] trans, double[][] original, File target) {
-		
+	private static double fillMeanCon(double[][] trans, double[][] original, File target) {
+		double mae = 0;
 		double[] averagesC = new double[numFeatures - 1];
 		double[] averagesF = new double[numFeatures - 1];
 		StringBuilder toWrite = new StringBuilder();
 		fillHeadings(toWrite);
 		fillAverages(averagesC, averagesF, trans, original);
-		fillAveragesFromMean(averagesC, averagesF, original, toWrite);
+		mae = fillAveragesFromMean(averagesC, averagesF, original, toWrite);
 		try {
 			writeToFile(toWrite, target);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+		return mae;
 	}
 
 	/**
@@ -228,8 +263,10 @@ public class DataImputation {
 	 * @param original the original data
 	 * @param toWrite StringBuilder
 	 */
-	private static void fillAveragesFromMean(double[] averagesC, double[] averagesF, double[][] original,
+	private static double fillAveragesFromMean(double[] averagesC, double[] averagesF, double[][] original,
 			StringBuilder toWrite) {
+		int missing = 0;
+		double sum = 0;
 		for(int i = 0; i < numObjects; i++){
 			//if(i == numObjects - 1){System.out.println("Last object: value: " + original[i][0]);}
 			for(int j = 0; j < numFeatures; j++){
@@ -250,15 +287,18 @@ public class DataImputation {
 					}
 				// fill missing values with correct average
 				}else{
-									
+					missing++;
 					if((int)original[i][numFeatures-1] == C){
 						toWrite.append(df.format(averagesC[j])+",");
+						sum += Math.abs(averagesC[j] - correctData[i][j]);
 					}else{
 						toWrite.append(df.format(averagesF[j])+",");
+						sum += Math.abs(averagesF[j] - correctData[i][j]);
 					}
 				}
 			}	
 		}
+		return sum/missing;
 	}
 
 	/**
@@ -301,9 +341,10 @@ public class DataImputation {
 	 * @param original the original data
 	 * @param target the file where the output will be written
 	 */
-	private static void fillMean(double[][] trans, double[][] original, File target) {
+	private static double fillMean(double[][] trans, double[][] original, File target) {
 		
-		//System.out.println("In fillMean: " + original[3][7]);
+		double sum = 0;
+		int missing = 0;
 		
 		// calculate average of every column using the transpose matrix
 		double[] averages = new double[numFeatures];
@@ -325,7 +366,6 @@ public class DataImputation {
 			averages[i] = total/count;
 		}
 		for(int i = 0; i < numObjects; i++){
-			//if(i == numObjects - 1){System.out.println("Last object: value: " + original[i][0]);}
 			for(int j = 0; j < numFeatures; j++){
 				// skip complete values
 				if(original[i][j] != -1){
@@ -345,6 +385,8 @@ public class DataImputation {
 				}
 				// If the value was missing use the average for that column
 				else{
+					missing++;
+					sum += Math.abs(averages[j]-correctData[i][j]);
 					toWrite.append(df.format(averages[j]));
 					toWrite.append(",");
 				}
@@ -355,6 +397,7 @@ public class DataImputation {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+		return sum/missing;
 	}
 
 	/**
