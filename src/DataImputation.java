@@ -21,7 +21,7 @@ public class DataImputation {
 	
 	//static DataObject[] objects;
 	static String[] featureNames;
-	static double[][] data1, data2, filled1, filled2, correctData;
+	static double[][] data1, data2, correctData;
 	static double[][] transData1, transData2;
 	static int numObjects = 3587;
 	static int numFeatures = 85;
@@ -40,51 +40,178 @@ public class DataImputation {
 		readData(source2, data2, transData2);
 		System.out.println("reading correct data");
 		readData(correct, correctData);
-		System.out.println("copying 0.4% data");
-		System.out.println("copying 20% data");
-		//System.out.println(data1[3][7]);
-		//System.out.println(transData1[7][3]);
-		//System.out.println(filled1[3][7]);
 		System.out.println("Filling 0.4% with mean");
 		fillMean(transData1, data1, impute4Mean);
 		System.out.println("Filling 20% with mean");
 		fillMean(transData2, data2, impute20Mean);
 		System.out.println("Filling 0.4% with Conditional mean");
 		fillMeanCon(transData1, data1, impute4MeanCon);
+		System.out.println("Filling 20% with Conditional mean");
 		fillMeanCon(transData2, data2, impute20MeanCon);
+		System.out.println("Filling 0.4% with hotDeck");
+		fillHotDeck(data1, impute4Hd);
+		System.out.println("Filling 20% with hotDeck");
+		fillHotDeck(data2, impute20Hd);
 		
 		System.out.println("Finished.");
 	}
 
+	private static void fillHotDeck(double[][] original, File impute4Hd2) {
+		int[] bestMatch = new int[numObjects];
+		// fill bestMatch with -1 as marker
+		for (int i = 0; i < numObjects; i++){
+			bestMatch[i] = -1;
+		}
+		StringBuilder toWrite = new StringBuilder();
+		fillHeadings(toWrite);
+		for(int i = 0; i < numObjects; i++){
+			for(int j = 0; j < numFeatures; j++){
+				// value to be use to fill missing value
+				double value = -1;
+				// End of line Class C
+				if(original[i][j] == 2){
+					toWrite.append("C,\n");
+				// End of line Class F
+				}else if(original[i][j] == 3){
+					toWrite.append("F,\n");
+				// value is present write it
+				}else if(original[i][j] != -1){
+					toWrite.append(df.format(original[i][j])+",");
+				// value missing fill it in
+				}else{
+					// nearest match not know find it
+					if(bestMatch[i] == -1){
+						System.out.println("No known nearest match. Finding Match!");
+						bestMatch[i] = findNearest(i, original);						
+						value = original[bestMatch[i]][j];
+						System.out.println(value);
+					
+					}
+					// if current bestMatch does not have a value find a sub
+					if( original[bestMatch[i]][j] == -1){
+						System.out.println("Best match has missing value!");
+						int subMatch = findSub(i, j, original);
+						value = original[subMatch][j];
+						System.out.println(value);
+					
+					}
+					// if the best match is known and has a value write it
+					else{
+						System.out.println("Using know nearest match");
+						value = original[bestMatch[i]][j];
+						System.out.println(value);
+					}
+					if(value == -1){
+						System.out.println("Failed to find value!");
+						System.exit(-1);
+					}else{
+						toWrite.append(df.format(value)+",");
+					}
+				}
+			}
+		}
+		try{
+			writeToFile(toWrite, impute4Hd2);
+		}catch(IOException e){
+			e.printStackTrace();
+		}
+		
+	}
+	
+	/**
+	 * findNearest - returns the row index of the object which is nearest to the target object 
+	 * using the class identifier as a numeric value. Being in a different class results in the 
+	 * distance for the class attribute to be 1.
+	 * @param rowToMatch - the row index of the object with a missing value
+	 * @param original - the 2D array holding the original data
+	 * @return the row index of the first closest object
+	 */
+	private static int findNearest(int rowToMatch, double[][] original){
+		int best = -1;
+		double minDistance = Double.MAX_VALUE;
+		// move through each row
+		for(int j = 0; j < numObjects; j++){
+			double runTotal = 0;
+			// if we get to the row we are trying to match skip it
+			// or if the row is missing the value we are trying to replace
+			if (j == rowToMatch){
+				continue;
+			}else{
+				// sum up distances
+				for(int k = 0; k < numFeatures; k++){
+					// if either value is missing add the max distance of 1
+					if( original[rowToMatch][k] == -1 || original[j][k] == -1){
+						runTotal += 1;
+					}else{
+					runTotal += Math.pow(original[rowToMatch][k] - original[j][k] , 2);
+					}
+				}
+			}
+			// check if the current row is the closest so far
+			
+			if(Math.sqrt(runTotal) < minDistance){
+				minDistance = Math.sqrt(runTotal);
+				best = j;
+			}
+		}
+		return best;
+	}
+	
+	/**
+	 * findSub - Finds the row index of the nearest object which has a value for the target attribute
+	 * @param rowToMatch index of the object with a missing attribute value
+	 * @param missingValue index of the missing attribute
+	 * @param original the 2D array holding the original data
+	 * @return index of nearest object
+	 */
+	private static int findSub(int rowToMatch, int missingValue, double[][] original){
+		int best = -1;
+		double minDistance = Double.MAX_VALUE;
+		// move through each row
+		for(int j = 0; j < numObjects; j++){
+			double runTotal = 0;
+			// if we get to the row we are trying to match skip it
+			// or if the row is missing the value we are trying to replace
+			if (j == rowToMatch || original[j][missingValue] == -1){
+				continue;
+			}else{
+				// sum up distances
+				for(int k = 0; k < numFeatures - 1; k++){
+					// if either value is missing add the max distance of 1
+					if( original[rowToMatch][k] == -1 || original[j][k] == -1){
+						runTotal += 1;
+					}else{
+					runTotal += Math.pow(original[rowToMatch][k] - original[j][k] , 2);
+					}
+				}
+			}
+			// check if the current row is the closest so far
+			
+			if(Math.sqrt(runTotal) < minDistance){
+				minDistance = Math.sqrt(runTotal);
+				best = j;
+			}
+		}
+		return best;
+	}
+
 	private static void fillMeanCon(double[][] trans, double[][] original, File target) {
-		double totalC, totalF;
-		int countC, countF;
+		
 		double[] averagesC = new double[numFeatures - 1];
 		double[] averagesF = new double[numFeatures - 1];
 		StringBuilder toWrite = new StringBuilder();
 		fillHeadings(toWrite);
-		//fillAverages(averagesC, averagesF);
-		for(int i = 0; i < numFeatures - 1; i++){
-			totalC = 0;
-			totalF = 0;
-			countC = 0;
-			countF = 0;
-			for(int j = 0; j < numObjects; j++){
-				if(trans[i][j] == -1){
-					continue;
-				}else{
-					if(original[j][numFeatures -1 ] == C){
-						totalC += trans[i][j];
-						countC++;
-					}else{
-						totalF += trans[i][j];
-						countF++;
-					}
-				}
-			}
-			averagesC[i] = totalC/countC;
-			averagesF[i] = totalF/countF;
+		fillAverages(averagesC, averagesF, trans, original);
+		fillAveragesFromMean(averagesC, averagesF, original, toWrite);
+		try {
+			writeToFile(toWrite, target);
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
+	}
+
+	private static void fillAveragesFromMean(double[] averagesC, double[] averagesF, double[][] original,
+			StringBuilder toWrite) {
 		for(int i = 0; i < numObjects; i++){
 			//if(i == numObjects - 1){System.out.println("Last object: value: " + original[i][0]);}
 			for(int j = 0; j < numFeatures; j++){
@@ -114,15 +241,38 @@ public class DataImputation {
 			}
 			//System.out.println(toWrite.toString());	
 		}
-		try {
-			writeToFile(toWrite, target);
-		} catch (IOException e) {
-			e.printStackTrace();
+		
+	}
+
+	private static void fillAverages(double[] averagesC, double[] averagesF, double[][] trans, double[][] original) {
+		double totalC, totalF;
+		int countC, countF;
+		for(int i = 0; i < numFeatures - 1; i++){
+			totalC = 0;
+			totalF = 0;
+			countC = 0;
+			countF = 0;
+			for(int j = 0; j < numObjects; j++){
+				if(trans[i][j] == -1){
+					continue;
+				}else{
+					if(original[j][numFeatures -1 ] == C){
+						totalC += trans[i][j];
+						countC++;
+					}else{
+						totalF += trans[i][j];
+						countF++;
+					}
+				}
+			}
+			averagesC[i] = totalC/countC;
+			averagesF[i] = totalF/countF;
 		}
+		
 	}
 
 	private static void fillMean(double[][] trans, double[][] original, File target) {
-		copyArray(original, filled1);
+		
 		//System.out.println("In fillMean: " + original[3][7]);
 		
 		// calculate average of every column using the transpose matrix
@@ -163,19 +313,8 @@ public class DataImputation {
 					}
 					//continue;
 				}else{
-					filled1[i][j] = averages[j];
-					if(j < numFeatures - 1){
-						toWrite.append(df.format(filled1[i][j]));
-						toWrite.append(",");
-					}else{
-						//System.out.println("In last column! Row: " + i);
-						if((int)filled1[i][j] == C){
-							//System.out.println(filled1[i][j]);
-							toWrite.append("C\n");
-						}else if((int)filled1[i][j] == F){
-							toWrite.append("F\n");
-						}
-					}
+					toWrite.append(df.format(averages[j]));
+					toWrite.append(",");
 				}
 			}
 			//System.out.println(toWrite.toString());	
@@ -217,8 +356,6 @@ public class DataImputation {
 		transData1 = new double[numFeatures][numObjects];
 		data2 = new double[numObjects][numFeatures];
 		transData2 = new double[numFeatures][numObjects];
-		filled1 = new double[numObjects][numFeatures];
-		filled2 = new double[numObjects][numFeatures];
 		correctData = new double[numObjects][numFeatures];
 		featureNames = new String[numFeatures];
 		
